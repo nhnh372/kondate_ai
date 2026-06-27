@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/recipes.dart';
 import 'models/recipe.dart';
+import 'repositories/favorite_repository.dart';
 import 'services/menu_generator.dart';
 
 void main() {
@@ -31,6 +32,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  final FavoriteRepository _favoriteRepository = const FavoriteRepository();
   int currentIndex = 0;
   @override
   void initState() {
@@ -40,9 +42,6 @@ class _MainPageState extends State<MainPage> {
     loadHistory();
     loadPriorities();
   }
-
-  String favoriteMenu = '';
-  bool isFavorite = false;
 
   List<String> historyMenus = [];
 
@@ -77,24 +76,28 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  void toggleFavorite(String menu) {
-    setState(() {
-      if (favoriteMenus.contains(menu)) {
-        favoriteMenus.remove(menu);
-      } else {
-        favoriteMenus.add(menu);
-      }
-    });
+  Future<void> addFavorite(String menu) async {
+    final updatedFavorites = await _favoriteRepository.addFavorite(menu);
 
-    saveFavorites();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      favoriteMenus = updatedFavorites;
+    });
   }
 
-  void removeFavorite(String menu) {
-    setState(() {
-      favoriteMenus.remove(menu);
-    });
+  Future<void> removeFavorite(String menu) async {
+    final updatedFavorites = await _favoriteRepository.removeFavorite(menu);
 
-    saveFavorites();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      favoriteMenus = updatedFavorites;
+    });
   }
 
   void updatePriorities({
@@ -137,17 +140,15 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<void> loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedFavorites = prefs.getStringList('favorites') ?? [];
+    final savedFavorites = await _favoriteRepository.loadFavorites();
+
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       favoriteMenus = savedFavorites;
     });
-  }
-
-  Future<void> saveFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('favorites', favoriteMenus);
   }
 
   Future<void> saveHistory() async {
@@ -178,7 +179,8 @@ class _MainPageState extends State<MainPage> {
       quickPriority: quickPriority,
       easyPriority: easyPriority,
       newPriority: newPriority,
-      onFavorite: toggleFavorite,
+      isFavoriteForMenu: favoriteMenus.contains,
+      onFavorite: addFavorite,
       onHistory: addHistory,
     ),
     WeeklyPlanPage(),
@@ -357,11 +359,14 @@ class MealDetailPage extends StatelessWidget {
 }
 
 class HomePage extends StatefulWidget {
+  static const initialRecipeName = '親子丼';
+
   final double nutritionPriority;
   final double quickPriority;
   final double easyPriority;
   final double newPriority;
-  final Function(String) onFavorite;
+  final bool Function(String) isFavoriteForMenu;
+  final Future<void> Function(String) onFavorite;
   final Function(String) onHistory;
 
   const HomePage({
@@ -370,6 +375,7 @@ class HomePage extends StatefulWidget {
     required this.quickPriority,
     required this.easyPriority,
     required this.newPriority,
+    required this.isFavoriteForMenu,
     required this.onFavorite,
     required this.onHistory,
   });
@@ -381,7 +387,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final MenuGenerator _menuGenerator = const MenuGenerator();
   Recipe selectedRecipe = recipes.firstWhere(
-    (recipe) => recipe.name == '親子丼',
+    (recipe) => recipe.name == HomePage.initialRecipeName,
     orElse: () => recipes.first,
   );
 
@@ -411,7 +417,6 @@ class _HomePageState extends State<HomePage> {
 
   String aiAdvice = '忙しい日なので、時短で作れる献立を選びました😊';
   String mode = '忙しい';
-  bool isFavorite = false;
 
   void generateMenu() {
     final recommendation = _menuGenerator.recommend(
@@ -426,7 +431,6 @@ class _HomePageState extends State<HomePage> {
 
     setState(() {
       selectedRecipe = recommendation.recipe;
-      isFavorite = false;
       aiAdvice =
           '${recommendation.reason} スコアは${recommendation.score.toStringAsFixed(1)}点です😊';
     });
@@ -436,6 +440,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isCurrentFavorite = widget.isFavoriteForMenu(menu);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('KONDATE AI'),
@@ -510,14 +516,23 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 12),
 
           ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                isFavorite = !isFavorite;
-                widget.onFavorite(menu);
-              });
-            },
-            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border),
-            label: Text(isFavorite ? 'お気に入り済み' : 'お気に入り'),
+            onPressed: isCurrentFavorite
+                ? null
+                : () async {
+                    await widget.onFavorite(menu);
+
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$menu をお気に入りに保存しました')),
+                    );
+                  },
+            icon: Icon(
+              isCurrentFavorite ? Icons.favorite : Icons.favorite_border,
+            ),
+            label: Text(isCurrentFavorite ? 'お気に入り済み' : 'お気に入り保存'),
           ),
 
           ElevatedButton.icon(
@@ -900,13 +915,35 @@ class _MyPageState extends State<MyPage> {
           ),
 
           if (widget.favoriteMenus.isEmpty)
-            const Text('お気に入りはまだありません')
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.favorite_border),
+                title: Text('まだお気に入りはありません'),
+                subtitle: Text('ホームで献立をお気に入り登録するとここに表示されます'),
+              ),
+            )
           else
             ...widget.favoriteMenus.map(
               (menu) => Card(
                 child: ListTile(
-                  leading: const Icon(Icons.favorite, color: Colors.red),
+                  leading: const Icon(Icons.favorite),
                   title: Text(menu),
+                  subtitle: const Text('お気に入りに追加された献立'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () {
+                      widget.onRemoveFavorite(menu);
+                    },
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            MealDetailPage(menu: menu, onFavorite: null),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -949,42 +986,6 @@ class _MyPageState extends State<MyPage> {
           const SizedBox(height: 12),
 
           const SizedBox(height: 24),
-          const SizedBox(height: 8),
-
-          if (widget.favoriteMenus.isEmpty)
-            const Card(
-              child: ListTile(
-                leading: Icon(Icons.favorite_border),
-                title: Text('まだお気に入りはありません'),
-                subtitle: Text('ホームで献立をお気に入り登録するとここに表示されます'),
-              ),
-            )
-          else
-            ...widget.favoriteMenus.map(
-              (menu) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.favorite),
-                  title: Text(menu),
-                  subtitle: const Text('お気に入りに追加された献立'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () {
-                      widget.onRemoveFavorite(menu);
-                    },
-                  ),
-
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            MealDetailPage(menu: menu, onFavorite: null),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
 
           const Card(
             child: ListTile(
