@@ -13,6 +13,7 @@ void main() {
       quick: 10,
       easy: 10,
       fresh: 10,
+      aiScore: 95,
     ),
     Recipe(
       name: '時短メニュー',
@@ -22,6 +23,7 @@ void main() {
       quick: 100,
       easy: 50,
       fresh: 10,
+      aiScore: 92,
     ),
   ];
 

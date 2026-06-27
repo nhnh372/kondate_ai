@@ -7,6 +7,7 @@ class Recipe {
     required this.quick,
     required this.easy,
     required this.fresh,
+    required this.aiScore,
   });
 
   final String name;
@@ -16,4 +17,5 @@ class Recipe {
   final int quick;
   final int easy;
   final int fresh;
+  final int aiScore;
 }

@@ -26,6 +26,16 @@ void main() {
       expect(day.sideDish.name, isNotEmpty);
       expect(day.soup.label, '汁物');
       expect(day.soup.name, isNotEmpty);
+      expect(day.cookingMinutes, greaterThan(0));
+      expect(day.estimatedCostYen, greaterThan(0));
+      expect(day.shoppingItems, isNotEmpty);
     }
+
+    expect(plan.totalMinutes, greaterThan(0));
+    expect(plan.totalCostYen, greaterThan(0));
+    expect(plan.shoppingItems, isNotEmpty);
+    expect(plan.averageNutritionBalance.protein, greaterThan(0));
+    expect(plan.averageNutritionBalance.vegetable, greaterThan(0));
+    expect(plan.averageNutritionBalance.energy, greaterThan(0));
   });
 }

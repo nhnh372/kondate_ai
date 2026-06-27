@@ -9,6 +9,7 @@ const List<Recipe> recipes = [
     quick: 70,
     easy: 60,
     fresh: 40,
+    aiScore: 94,
   ),
   Recipe(
     name: '親子丼',
@@ -18,6 +19,7 @@ const List<Recipe> recipes = [
     quick: 95,
     easy: 90,
     fresh: 30,
+    aiScore: 96,
   ),
   Recipe(
     name: 'ビビンバ',
@@ -27,6 +29,7 @@ const List<Recipe> recipes = [
     quick: 60,
     easy: 50,
     fresh: 95,
+    aiScore: 88,
   ),
   Recipe(
     name: 'カレーライス',
@@ -36,6 +39,7 @@ const List<Recipe> recipes = [
     quick: 80,
     easy: 95,
     fresh: 20,
+    aiScore: 86,
   ),
   Recipe(
     name: '生姜焼き',
@@ -45,6 +49,7 @@ const List<Recipe> recipes = [
     quick: 70,
     easy: 80,
     fresh: 30,
+    aiScore: 90,
   ),
   Recipe(
     name: '麻婆豆腐',
@@ -54,6 +59,7 @@ const List<Recipe> recipes = [
     quick: 85,
     easy: 80,
     fresh: 40,
+    aiScore: 87,
   ),
   Recipe(
     name: 'サバの味噌煮',
@@ -63,6 +69,7 @@ const List<Recipe> recipes = [
     quick: 60,
     easy: 55,
     fresh: 20,
+    aiScore: 91,
   ),
   Recipe(
     name: '冷やし中華',
@@ -72,5 +79,6 @@ const List<Recipe> recipes = [
     quick: 90,
     easy: 95,
     fresh: 90,
+    aiScore: 89,
   ),
 ];

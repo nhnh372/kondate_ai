@@ -254,6 +254,7 @@ class MealDetailPage extends StatelessWidget {
     const detailRepository = MealDetailRepository();
     const aiCommentService = AiCommentService();
     final detail = detailRepository.findByName(menu, category: category);
+    final recipe = AiRecommendationInfo.findRecipe(menu);
 
     return Scaffold(
       appBar: AppBar(
@@ -269,9 +270,9 @@ class MealDetailPage extends StatelessWidget {
                   return;
                 }
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$menu をお気に入りに保存しました')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('$menu をお気に入りに保存しました')));
               },
             ),
         ],
@@ -279,6 +280,10 @@ class MealDetailPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          RecipeImage(recipeName: detail.name, height: 210),
+          const SizedBox(height: 16),
+          AiRecommendationCard(recipeName: detail.name, recipe: recipe),
+          const SizedBox(height: 12),
           Text(
             detail.name,
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
@@ -417,11 +422,11 @@ class _HomePageState extends State<HomePage> {
   String get menu => selectedRecipe.name;
 
   PriorityWeights get priorityWeights => PriorityWeights(
-        nutrition: widget.nutritionPriority,
-        quick: widget.quickPriority,
-        easy: widget.easyPriority,
-        fresh: widget.newPriority,
-      );
+    nutrition: widget.nutritionPriority,
+    quick: widget.quickPriority,
+    easy: widget.easyPriority,
+    fresh: widget.newPriority,
+  );
 
   String getAiComment() {
     return _aiCommentService.priorityComment(priorityWeights);
@@ -448,6 +453,11 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final isCurrentFavorite = widget.isFavoriteForMenu(menu);
+    final statusMessage = switch (mode) {
+      '忙しい' => '今日は忙しいので、時短で洗い物少なめを意識しています。',
+      '余裕ある' => '今日は少し余裕があるので、栄養バランスと新しさを足しています。',
+      _ => '今日は無理なく作れる、家族で食べやすい献立を選びます。',
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -457,81 +467,54 @@ class _HomePageState extends State<HomePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Card(
+          Card(
+            color: const Color(0xFFFFF3E0),
             child: ListTile(
-              leading: Icon(Icons.sentiment_satisfied),
-              title: Text('今日の状態：忙しい'),
-              subtitle: Text('今日は忙しそうなので時短レシピを優先しています！'),
+              leading: const Icon(Icons.home_rounded, color: Colors.orange),
+              title: Text('今日の状態：$mode'),
+              subtitle: Text(statusMessage),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           const Text(
             '今日のおすすめ献立',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
 
-          const SizedBox(height: 10),
-
-          Text(
-            getAiComment(),
-            style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-          ),
-
-          const SizedBox(height: 20),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    mode = '忙しい';
-                  });
-                },
-                child: const Text('忙しい'),
+              ChoiceChip(
+                label: const Text('忙しい'),
+                selected: mode == '忙しい',
+                avatar: const Icon(Icons.flash_on, size: 18),
+                onSelected: (_) => setState(() => mode = '忙しい'),
               ),
-
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    mode = '普通';
-                  });
-                },
-                child: const Text('普通'),
+              ChoiceChip(
+                label: const Text('普通'),
+                selected: mode == '普通',
+                avatar: const Icon(Icons.sentiment_satisfied, size: 18),
+                onSelected: (_) => setState(() => mode = '普通'),
               ),
-
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    mode = '余裕ある';
-                  });
-                },
-                child: const Text('余裕ある'),
+              ChoiceChip(
+                label: const Text('余裕ある'),
+                selected: mode == '余裕ある',
+                avatar: const Icon(Icons.restaurant, size: 18),
+                onSelected: (_) => setState(() => mode = '余裕ある'),
               ),
             ],
           ),
 
-          const SizedBox(height: 20),
-          MealCard(
-            title: menu,
-            time: selectedRecipe.time,
-            tags: selectedRecipe.tags,
-            locked: false,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => MealDetailPage(
-                    menu: menu,
-                    onFavorite: widget.onFavorite,
-                  ),
-                ),
-              );
-            },
-          ),
           const SizedBox(height: 12),
-
-          ElevatedButton.icon(
+          FilledButton.icon(
+            onPressed: generateMenu,
+            icon: const Icon(Icons.smart_toy),
+            label: const Text('AI献立生成'),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
             onPressed: isCurrentFavorite
                 ? null
                 : () async {
@@ -550,26 +533,405 @@ class _HomePageState extends State<HomePage> {
             ),
             label: Text(isCurrentFavorite ? 'お気に入り済み' : 'お気に入り保存'),
           ),
-
-          ElevatedButton.icon(
-            onPressed: generateMenu,
-            icon: const Icon(Icons.smart_toy),
-            label: const Text('AI献立生成'),
-          ),
+          const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: widget.onOpenWeeklyPlan,
             icon: const Icon(Icons.calendar_month),
             label: const Text('週間献立を見る'),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          _TodayRecommendationCard(
+            recipe: selectedRecipe,
+            suggestionReason: getAiComment(),
+            aiAdvice: aiAdvice,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      MealDetailPage(menu: menu, onFavorite: widget.onFavorite),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           Card(
+            color: const Color(0xFFFFFCF7),
             child: ListTile(
-              leading: const Icon(Icons.smart_toy),
-              title: const Text('AIからのアドバイス'),
-              subtitle: Text(aiAdvice),
+              leading: const Icon(Icons.auto_awesome, color: Colors.orange),
+              title: const Text('今日の提案理由'),
+              subtitle: Text('$aiAdvice\n子どもも食べやすく、栄養バランスも見ています。'),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TodayRecommendationCard extends StatelessWidget {
+  final Recipe recipe;
+  final String suggestionReason;
+  final String aiAdvice;
+  final VoidCallback onTap;
+
+  const _TodayRecommendationCard({
+    required this.recipe,
+    required this.suggestionReason,
+    required this.aiAdvice,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFFFFFCF7),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RecipeImage(recipeName: recipe.name, height: 190),
+              const SizedBox(height: 14),
+              AiRecommendationCard(
+                recipeName: recipe.name,
+                recipe: recipe,
+                compact: true,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      suggestionReason,
+                      style: TextStyle(color: Colors.grey[700]),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                recipe.name,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _RecipeInfoChip(
+                    icon: Icons.timer,
+                    label: recipe.time,
+                    color: Colors.orange,
+                  ),
+                  const _RecipeInfoChip(
+                    icon: Icons.cleaning_services,
+                    label: '洗い物少なめ',
+                    color: Colors.teal,
+                  ),
+                  const _RecipeInfoChip(
+                    icon: Icons.child_care,
+                    label: '子ども向け',
+                    color: Colors.pink,
+                  ),
+                  ...recipe.tags.map(
+                    (tag) => _RecipeInfoChip(
+                      icon: Icons.label,
+                      label: tag,
+                      color: Colors.brown,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(aiAdvice),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecipeInfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _RecipeInfoChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: Icon(icon, size: 16, color: color),
+      label: Text(label),
+      backgroundColor: Color.lerp(Colors.white, color, 0.08),
+      side: BorderSide(color: Color.lerp(Colors.white, color, 0.25)!),
+    );
+  }
+}
+
+class RecipeImage extends StatelessWidget {
+  final String recipeName;
+  final double height;
+
+  const RecipeImage({
+    super.key,
+    required this.recipeName,
+    required this.height,
+  });
+
+  static const String _assetBasePath = 'lib/assets/images/recipes';
+
+  String? get assetPath {
+    final fileName = _assetFileNames[recipeName];
+
+    if (fileName == null) {
+      return null;
+    }
+
+    return '$_assetBasePath/$fileName';
+  }
+
+  static const Map<String, String> _assetFileNames = {
+    '親子丼': 'oyakodon.jpg',
+    'カレーライス': 'curry_rice.jpg',
+    '焼きそば': 'yakisoba.jpg',
+    'ハンバーグ': 'hamburg.jpg',
+    'オムライス': 'omurice.jpg',
+    '豚の生姜焼き': 'pork_ginger.jpg',
+    '鮭のホイル焼き': 'salmon_foil.jpg',
+    'ビビンバ': 'bibimbap.jpg',
+    '生姜焼き': 'ginger_pork.jpg',
+    '麻婆豆腐': 'mapo_tofu.jpg',
+    'サバの味噌煮': 'saba_miso.jpg',
+    '冷やし中華': 'hiyashi_chuka.jpg',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final path = assetPath;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: path == null
+            ? const _NoRecipeImagePlaceholder()
+            : Image.asset(
+                path,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const _NoRecipeImagePlaceholder();
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _NoRecipeImagePlaceholder extends StatelessWidget {
+  const _NoRecipeImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E0),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.restaurant_menu, color: Colors.orange, size: 42),
+            SizedBox(height: 8),
+            Text(
+              'No Image',
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AiRecommendationInfo {
+  const AiRecommendationInfo._();
+
+  static const int fallbackScore = 78;
+
+  static Recipe? findRecipe(String recipeName) {
+    for (final recipe in recipes) {
+      if (recipe.name == recipeName) {
+        return recipe;
+      }
+    }
+
+    return null;
+  }
+
+  static int scoreFor(Recipe? recipe) {
+    return recipe?.aiScore ?? fallbackScore;
+  }
+
+  static String starsFor(int score) {
+    if (score >= 95) {
+      return '★★★★★';
+    }
+
+    if (score >= 85) {
+      return '★★★★☆';
+    }
+
+    if (score >= 70) {
+      return '★★★☆☆';
+    }
+
+    if (score >= 50) {
+      return '★★☆☆☆';
+    }
+
+    return '★☆☆☆☆';
+  }
+
+  static List<String> reasonTagsFor(Recipe? recipe) {
+    if (recipe == null) {
+      return const ['家庭向け', '組み合わせやすい', '献立調整'];
+    }
+
+    final tags = <String>[];
+
+    if (recipe.nutrition >= 80) {
+      tags.add('栄養バランス');
+    }
+
+    if (recipe.quick >= 80) {
+      tags.add('時短');
+    }
+
+    if (recipe.easy >= 80) {
+      tags.add('簡単');
+    }
+
+    if (recipe.fresh >= 80) {
+      tags.add('新しさ');
+    }
+
+    tags.add('子ども向け');
+    tags.add('洗い物少ない');
+
+    return tags.take(5).toList();
+  }
+}
+
+class AiRecommendationCard extends StatelessWidget {
+  final String recipeName;
+  final Recipe? recipe;
+  final bool compact;
+
+  const AiRecommendationCard({
+    super.key,
+    required this.recipeName,
+    required this.recipe,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final score = AiRecommendationInfo.scoreFor(recipe);
+    final stars = AiRecommendationInfo.starsFor(score);
+    final reasonTags = AiRecommendationInfo.reasonTagsFor(recipe);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(compact ? 10 : 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.psychology, color: Colors.orange, size: 20),
+                const SizedBox(width: 6),
+                Text(
+                  'AIおすすめ $score点',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                Text(
+                  stars,
+                  style: const TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: compact ? 8 : 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: reasonTags
+                  .map((tag) => _AiReasonTag(label: tag))
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AiReasonTag extends StatelessWidget {
+  final String label;
+
+  const _AiReasonTag({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -626,11 +988,11 @@ class _WeeklyPlanPageState extends State<WeeklyPlanPage> {
   }
 
   PriorityWeights get priorityWeights => PriorityWeights(
-        nutrition: widget.nutritionPriority,
-        quick: widget.quickPriority,
-        easy: widget.easyPriority,
-        fresh: widget.newPriority,
-      );
+    nutrition: widget.nutritionPriority,
+    quick: widget.quickPriority,
+    easy: widget.easyPriority,
+    fresh: widget.newPriority,
+  );
 
   void regenerateWeeklyPlan() {
     setState(() {
@@ -639,51 +1001,82 @@ class _WeeklyPlanPageState extends State<WeeklyPlanPage> {
     });
   }
 
+  void openShoppingList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ShoppingListPage(weeklyPlan: weeklyPlan),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final averageNutrition = weeklyPlan.averageNutritionBalance;
+    final aiComment = _aiCommentService.weeklyPlanComment(
+      weeklyPlan,
+      priorityWeights,
+    );
+
     return Scaffold(
       appBar: AppBar(title: const Text('週間献立'), backgroundColor: Colors.orange),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            color: const Color(0xFFFFF3E0),
-            child: ListTile(
-              leading: const Icon(Icons.smart_toy),
-              title: const Text('AIが1週間の献立を提案しました'),
-              subtitle: Text(
-                _aiCommentService.weeklyPlanComment(
-                  weeklyPlan,
-                  priorityWeights,
-                ),
-              ),
-            ),
+          _WeeklyAiCommentCard(comment: aiComment),
+          const SizedBox(height: 14),
+          const Text(
+            '今週の献立サマリー',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _WeeklySummaryTile(
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 68,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _WeeklySummaryTile(
                   icon: Icons.calendar_month,
                   label: '期間',
-                  value: '${weeklyPlan.days.length}日分',
+                  value: '${weeklyPlan.days.length}日',
                 ),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: _WeeklySummaryTile(
+                const _WeeklySummaryTile(
                   icon: Icons.restaurant_menu,
                   label: '構成',
                   value: '主菜・副菜・汁物',
                 ),
+                _WeeklySummaryTile(
+                  icon: Icons.timer,
+                  label: '調理時間',
+                  value: '${weeklyPlan.totalMinutes}分',
+                ),
+                _WeeklySummaryTile(
+                  icon: Icons.payments,
+                  label: '概算食費',
+                  value: '${weeklyPlan.totalCostYen}円',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          _WeeklyNutritionCard(balance: averageNutrition),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: openShoppingList,
+                  icon: const Icon(Icons.shopping_cart),
+                  label: const Text('買い物リスト'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: regenerateWeeklyPlan,
+                icon: const Icon(Icons.refresh),
+                tooltip: '週間献立を再生成',
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: regenerateWeeklyPlan,
-            icon: const Icon(Icons.refresh),
-            label: const Text('週間献立を再生成'),
           ),
           const SizedBox(height: 8),
           ...weeklyPlan.days.map(
@@ -706,6 +1099,96 @@ class _WeeklyPlanPageState extends State<WeeklyPlanPage> {
   }
 }
 
+class ShoppingListPage extends StatelessWidget {
+  final WeeklyPlan weeklyPlan;
+
+  const ShoppingListPage({super.key, required this.weeklyPlan});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = weeklyPlan.shoppingItems;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('買い物リスト'),
+        backgroundColor: Colors.orange,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: const Color(0xFFFFF8E1),
+            child: ListTile(
+              leading: const Icon(Icons.shopping_basket, color: Colors.orange),
+              title: const Text('1週間分の材料メモ'),
+              subtitle: Text('主菜・副菜・汁物から${items.length}件を仮集計しています。'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.info_outline),
+                title: Text('買い物リストはまだありません'),
+                subtitle: Text('週間献立を作成すると、ここに材料候補が表示されます。'),
+              ),
+            )
+          else
+            ...items.map((item) => _ShoppingListItem(name: item)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShoppingListItem extends StatelessWidget {
+  final String name;
+
+  const _ShoppingListItem({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: CheckboxListTile(
+        value: false,
+        onChanged: (_) {},
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(name),
+      ),
+    );
+  }
+}
+
+class _WeeklyAiCommentCard extends StatelessWidget {
+  final String comment;
+
+  const _WeeklyAiCommentCard({required this.comment});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFFFFF3E0),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        leading: const Icon(Icons.smart_toy, color: Colors.orange, size: 22),
+        minTileHeight: 58,
+        title: const Text(
+          'AIが1週間の献立を提案しました',
+          style: TextStyle(fontWeight: FontWeight.bold),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: const Text('栄養バランスを重視して整えました'),
+        children: [
+          Align(alignment: Alignment.centerLeft, child: Text(comment)),
+        ],
+      ),
+    );
+  }
+}
+
 class _WeeklySummaryTile extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -719,31 +1202,104 @@ class _WeeklySummaryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.orange.shade100),
-        borderRadius: BorderRadius.circular(8),
+    return SizedBox(
+      width: 108,
+      child: Card(
+        margin: const EdgeInsets.only(right: 6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.orange, size: 18),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 9, color: Colors.grey[700]),
+              ),
+            ],
+          ),
+        ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.orange),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(color: Colors.grey[700])),
-                  Text(
-                    value,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
+    );
+  }
+}
+
+class _WeeklyNutritionCard extends StatelessWidget {
+  final NutritionBalance balance;
+
+  const _WeeklyNutritionCard({required this.balance});
+
+  int get averageScore =>
+      ((balance.protein + balance.vegetable + balance.energy) / 3).round();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+        leading: const Icon(Icons.monitor_heart, color: Colors.orange),
+        title: Text(
+          '栄養バランス $averageScore%',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: const Text('タップして詳細を見る'),
+        children: [
+          _NutritionBar(label: 'たんぱく質', value: balance.protein),
+          _NutritionBar(label: '野菜量', value: balance.vegetable),
+          _NutritionBar(label: 'エネルギー', value: balance.energy),
+        ],
+      ),
+    );
+  }
+}
+
+class _NutritionBar extends StatelessWidget {
+  final String label;
+  final int value;
+
+  const _NutritionBar({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        children: [
+          SizedBox(width: 86, child: Text(label)),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: value / 100,
+                minHeight: 9,
+                backgroundColor: Colors.orange.shade50,
+                color: Colors.orange,
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 42,
+            child: Text(
+              '$value%',
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -762,17 +1318,36 @@ class WeeklyDayPlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(top: 12),
+      margin: const EdgeInsets.only(top: 8),
+      color: const Color(0xFFFFFCF7),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              dayPlan.dayName,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    dayPlan.dayName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                _DayInfoChip(
+                  icon: Icons.timer,
+                  label: '約${dayPlan.cookingMinutes}分',
+                ),
+                const SizedBox(width: 4),
+                _DayInfoChip(
+                  icon: Icons.payments,
+                  label: '約${dayPlan.estimatedCostYen}円',
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             WeeklyMealTile(
               item: dayPlan.mainDish,
               showTopBorder: false,
@@ -789,6 +1364,26 @@ class WeeklyDayPlanCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DayInfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _DayInfoChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      labelPadding: EdgeInsets.zero,
+      avatar: Icon(icon, size: 14, color: Colors.orange),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      side: BorderSide(color: Colors.orange.shade100),
+      backgroundColor: Colors.white,
     );
   }
 }
@@ -818,26 +1413,68 @@ class WeeklyMealTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = _labelColor(item.label);
+
     return DecoratedBox(
       decoration: BoxDecoration(
         border: showTopBorder
             ? Border(top: BorderSide(color: Colors.orange.shade100))
             : null,
       ),
-      child: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: ListTile(
-          leading: Icon(icon, color: Colors.orange),
-          title: Text(
-            item.name,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  item.label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 20),
+            ],
           ),
-          subtitle: Text(item.label),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: onTap,
         ),
       ),
     );
+  }
+
+  Color _labelColor(String label) {
+    switch (label) {
+      case '副菜':
+        return Colors.green;
+      case '汁物':
+        return Colors.blueGrey;
+      default:
+        return Colors.orange;
+    }
   }
 }
 

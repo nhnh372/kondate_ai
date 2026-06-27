@@ -38,6 +38,26 @@ class WeeklyPlanRepository {
     '玉ねぎの味噌汁',
   ];
 
+  static const List<List<String>> _sideDishIngredients = [
+    ['ほうれん草', 'かつお節'],
+    ['ひじき', 'にんじん'],
+    ['じゃがいも', 'きゅうり'],
+    ['きゅうり', '塩昆布'],
+    ['小松菜', 'ごま'],
+    ['豆腐', 'ねぎ'],
+    ['切り干し大根', '油揚げ'],
+  ];
+
+  static const List<List<String>> _soupIngredients = [
+    ['豆腐', '味噌'],
+    ['わかめ', '鶏がらスープ'],
+    ['キャベツ', 'にんじん'],
+    ['卵', 'ねぎ'],
+    ['きのこ', '味噌'],
+    ['豚こま肉', '大根'],
+    ['玉ねぎ', '味噌'],
+  ];
+
   WeeklyPlan generate({
     required PriorityWeights weights,
     int generationIndex = 0,
@@ -60,6 +80,10 @@ class WeeklyPlanRepository {
 
       return WeeklyDayPlan(
         dayName: _days[index],
+        cookingMinutes: _cookingMinutesFor(recommendation.recipe, dayIndex),
+        estimatedCostYen: _estimatedCostFor(dayIndex),
+        nutritionBalance: _nutritionBalanceFor(dayIndex),
+        shoppingItems: _shoppingItemsFor(recommendation.recipe, dayIndex),
         mainDish: WeeklyMealItem(
           label: '主菜',
           name: recommendation.recipe.name,
@@ -101,5 +125,41 @@ class WeeklyPlanRepository {
       easy: weights.easy + adjustment.easy,
       fresh: weights.fresh + adjustment.fresh,
     );
+  }
+
+  int _cookingMinutesFor(Recipe recipe, int index) {
+    final parsedMinutes = int.tryParse(recipe.time.replaceAll('分', '')) ?? 20;
+    final sideAndSoupMinutes = 12 + (index % 3) * 3;
+
+    return parsedMinutes + sideAndSoupMinutes;
+  }
+
+  int _estimatedCostFor(int index) {
+    const baseCost = 780;
+    const dayCostSteps = [0, 120, 80, 160, 100, 220, 140];
+
+    return baseCost + dayCostSteps[index % dayCostSteps.length];
+  }
+
+  NutritionBalance _nutritionBalanceFor(int index) {
+    const balances = [
+      NutritionBalance(protein: 84, vegetable: 78, energy: 72),
+      NutritionBalance(protein: 76, vegetable: 82, energy: 78),
+      NutritionBalance(protein: 80, vegetable: 74, energy: 82),
+      NutritionBalance(protein: 72, vegetable: 86, energy: 76),
+      NutritionBalance(protein: 82, vegetable: 80, energy: 74),
+      NutritionBalance(protein: 78, vegetable: 76, energy: 86),
+      NutritionBalance(protein: 86, vegetable: 72, energy: 80),
+    ];
+
+    return balances[index % balances.length];
+  }
+
+  List<String> _shoppingItemsFor(Recipe recipe, int index) {
+    return [
+      recipe.name,
+      ..._sideDishIngredients[index % _sideDishIngredients.length],
+      ..._soupIngredients[index % _soupIngredients.length],
+    ];
   }
 }

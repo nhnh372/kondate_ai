@@ -1,0 +1,15 @@
+class AppUser {
+  const AppUser({
+    required this.id,
+    this.email,
+    this.displayName,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String? email;
+  final String? displayName;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+}
