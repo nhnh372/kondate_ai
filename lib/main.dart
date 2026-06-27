@@ -3,7 +3,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/recipes.dart';
 import 'models/recipe.dart';
+import 'models/weekly_plan.dart';
 import 'repositories/favorite_repository.dart';
+import 'repositories/meal_detail_repository.dart';
+import 'repositories/weekly_plan_repository.dart';
+import 'services/ai_comment_service.dart';
 import 'services/menu_generator.dart';
 
 void main() {
@@ -173,6 +177,12 @@ class _MainPageState extends State<MainPage> {
     saveHistory();
   }
 
+  void openWeeklyPlan() {
+    setState(() {
+      currentIndex = 1;
+    });
+  }
+
   List<Widget> get pages => [
     HomePage(
       nutritionPriority: nutritionPriority,
@@ -182,8 +192,14 @@ class _MainPageState extends State<MainPage> {
       isFavoriteForMenu: favoriteMenus.contains,
       onFavorite: addFavorite,
       onHistory: addHistory,
+      onOpenWeeklyPlan: openWeeklyPlan,
     ),
-    WeeklyPlanPage(),
+    WeeklyPlanPage(
+      nutritionPriority: nutritionPriority,
+      quickPriority: quickPriority,
+      easyPriority: easyPriority,
+      newPriority: newPriority,
+    ),
     HistoryPage(historyMenus: historyMenus),
     MyPage(
       favoriteMenus: favoriteMenus,
@@ -221,136 +237,140 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-Map<String, dynamic> getMealData(String menu) {
-  final data = {
-    '親子丼': {
-      'time': '20分',
-      'ingredients': ['鶏もも肉 200g', '卵 2個', '玉ねぎ 1/2個', 'めんつゆ 大さじ3', 'ご飯 2人分'],
-      'steps': [
-        '玉ねぎを薄切りにする',
-        '鶏肉を一口サイズに切る',
-        'フライパンで具材を煮る',
-        '溶き卵を入れて半熟で止める',
-        'ご飯にのせる',
-      ],
-
-      'comment': '時短で作れて、子どもにも人気の献立です😊',
-    },
-    'カレーライス': {
-      'time': '35分',
-      'ingredients': ['豚肉 200g', '玉ねぎ 1個', 'にんじん 1本', 'じゃがいも 2個', 'カレールー 適量'],
-      'steps': ['野菜を一口サイズに切る', '肉と野菜を炒める', '水を入れて煮込む', 'ルーを入れてさらに煮る', 'ご飯にかける'],
-      'comment': '作り置きにも向いていて、翌日も使いやすい献立です🍛',
-    },
-    '焼きそば': {
-      'time': '15分',
-      'ingredients': ['焼きそば麺 2玉', '豚こま肉 150g', 'キャベツ 1/4個', 'もやし 1袋', 'ソース 適量'],
-      'steps': ['野菜を切る', '肉を炒める', '野菜と麺を入れる', 'ソースで味付けする'],
-      'comment': '忙しい日にかなり使いやすい時短メニューです🔥',
-    },
-    'ハンバーグ': {
-      'time': '30分',
-      'ingredients': ['合いびき肉 300g', '玉ねぎ 1/2個', '卵 1個', 'パン粉 大さじ4', '牛乳 大さじ3'],
-      'steps': [
-        '玉ねぎをみじん切りにする',
-        '材料をボウルで混ぜる',
-        '形を整える',
-        'フライパンで両面を焼く',
-        'ふたをして中まで火を通す',
-      ],
-      'comment': '家族みんなで食べやすい定番メニューです🍖',
-    },
-
-    'オムライス': {
-      'time': '25分',
-      'ingredients': ['ご飯 2人分', '卵 3個', '鶏肉 150g', '玉ねぎ 1/2個', 'ケチャップ 大さじ4'],
-      'steps': [
-        '玉ねぎと鶏肉を切る',
-        '具材を炒める',
-        'ご飯とケチャップを入れて炒める',
-        '卵を焼く',
-        'チキンライスに卵をのせる',
-      ],
-      'comment': '子どもにも人気で、休日ランチにも使いやすい献立です🍳',
-    },
-
-    '豚の生姜焼き': {
-      'time': '25分',
-      'ingredients': [
-        '豚ロース肉 250g',
-        '玉ねぎ 1/2個',
-        'しょうがチューブ 小さじ2',
-        'しょうゆ 大さじ2',
-        'みりん 大さじ2',
-      ],
-      'steps': ['玉ねぎを薄切りにする', '調味料を混ぜる', '豚肉と玉ねぎを焼く', '調味料を入れて絡める', '皿に盛り付ける'],
-      'comment': 'ご飯が進む定番おかずで、忙しい日にも作りやすいです🔥',
-    },
-  };
-
-  return data[menu] ??
-      {
-        'time': '30分',
-        'ingredients': ['サンプル食材'],
-        'steps': ['サンプル手順'],
-        'comment': '今日はおすすめの献立です！',
-      };
-}
-
 class MealDetailPage extends StatelessWidget {
   final String menu;
-  final Function(String)? onFavorite;
+  final String category;
+  final Future<void> Function(String)? onFavorite;
 
-  const MealDetailPage({super.key, required this.menu, this.onFavorite});
+  const MealDetailPage({
+    super.key,
+    required this.menu,
+    this.category = '主菜',
+    this.onFavorite,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final mealData = getMealData(menu);
-    final ingredients = mealData['ingredients'] as List<String>;
-    final steps = mealData['steps'] as List<String>;
+    const detailRepository = MealDetailRepository();
+    const aiCommentService = AiCommentService();
+    final detail = detailRepository.findByName(menu, category: category);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(menu),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.favorite_border),
-            onPressed: () {
-              onFavorite?.call(menu);
+          if (onFavorite != null)
+            IconButton(
+              icon: const Icon(Icons.favorite_border),
+              onPressed: () async {
+                await onFavorite?.call(menu);
 
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('$menu をお気に入りに追加しました！')));
-            },
+                if (!context.mounted) {
+                  return;
+                }
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$menu をお気に入りに保存しました')),
+                );
+              },
+            ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            detail.name,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(
+                avatar: const Icon(Icons.category, size: 18),
+                label: Text(detail.category),
+              ),
+              Chip(
+                avatar: const Icon(Icons.timer, size: 18),
+                label: Text(detail.time),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          MealDetailSection(
+            icon: Icons.smart_toy,
+            title: 'AIコメント',
+            child: Text(
+              '${detail.comment}\n${aiCommentService.detailComment(detail)}',
+            ),
+          ),
+          MealDetailSection(
+            icon: Icons.shopping_basket,
+            title: '材料',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: detail.ingredients
+                  .map((ingredient) => Text('・$ingredient'))
+                  .toList(),
+            ),
+          ),
+          MealDetailSection(
+            icon: Icons.format_list_numbered,
+            title: '作り方',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: detail.steps.asMap().entries.map((entry) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('${entry.key + 1}. ${entry.value}'),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+    );
+  }
+}
+
+class MealDetailSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  const MealDetailSection({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              menu,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Icon(icon, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 20),
-
-            const Text('⏱️ 調理時間：30分', style: TextStyle(fontSize: 18)),
-
-            const SizedBox(height: 20),
-
-            Text('🛒 材料\n${ingredients.map((item) => '・$item').join('\n')}'),
-            const SizedBox(height: 20),
-
-            Text(
-              '👨‍🍳 作り方\n${steps.asMap().entries.map((entry) => '${entry.key + 1}. ${entry.value}').join('\n')}',
-            ),
-
-            const SizedBox(height: 20),
-
-            Text('🤖 AIコメント\n${mealData['comment']}'),
+            const SizedBox(height: 10),
+            child,
           ],
         ),
       ),
@@ -367,7 +387,8 @@ class HomePage extends StatefulWidget {
   final double newPriority;
   final bool Function(String) isFavoriteForMenu;
   final Future<void> Function(String) onFavorite;
-  final Function(String) onHistory;
+  final void Function(String) onHistory;
+  final VoidCallback onOpenWeeklyPlan;
 
   const HomePage({
     super.key,
@@ -378,6 +399,7 @@ class HomePage extends StatefulWidget {
     required this.isFavoriteForMenu,
     required this.onFavorite,
     required this.onHistory,
+    required this.onOpenWeeklyPlan,
   });
 
   @override
@@ -386,6 +408,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final MenuGenerator _menuGenerator = const MenuGenerator();
+  final AiCommentService _aiCommentService = const AiCommentService();
   Recipe selectedRecipe = recipes.firstWhere(
     (recipe) => recipe.name == HomePage.initialRecipeName,
     orElse: () => recipes.first,
@@ -393,26 +416,15 @@ class _HomePageState extends State<HomePage> {
 
   String get menu => selectedRecipe.name;
 
+  PriorityWeights get priorityWeights => PriorityWeights(
+        nutrition: widget.nutritionPriority,
+        quick: widget.quickPriority,
+        easy: widget.easyPriority,
+        fresh: widget.newPriority,
+      );
+
   String getAiComment() {
-    if (widget.nutritionPriority >= widget.quickPriority &&
-        widget.nutritionPriority >= widget.easyPriority &&
-        widget.nutritionPriority >= widget.newPriority) {
-      return '今日は栄養バランスを重視した献立を提案します！';
-    }
-
-    if (widget.quickPriority >= widget.nutritionPriority &&
-        widget.quickPriority >= widget.easyPriority &&
-        widget.quickPriority >= widget.newPriority) {
-      return '今日は忙しい方向けの時短献立です！';
-    }
-
-    if (widget.easyPriority >= widget.nutritionPriority &&
-        widget.easyPriority >= widget.quickPriority &&
-        widget.easyPriority >= widget.newPriority) {
-      return '今日は簡単に作れる献立を提案します！';
-    }
-
-    return '今日は新しい料理にチャレンジしてみましょう！';
+    return _aiCommentService.priorityComment(priorityWeights);
   }
 
   String aiAdvice = '忙しい日なので、時短で作れる献立を選びました😊';
@@ -421,12 +433,7 @@ class _HomePageState extends State<HomePage> {
   void generateMenu() {
     final recommendation = _menuGenerator.recommend(
       recipes: recipes,
-      weights: PriorityWeights(
-        nutrition: widget.nutritionPriority,
-        quick: widget.quickPriority,
-        easy: widget.easyPriority,
-        fresh: widget.newPriority,
-      ),
+      weights: priorityWeights,
     );
 
     setState(() {
@@ -450,20 +457,18 @@ class _HomePageState extends State<HomePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
+          const Card(
             child: ListTile(
               leading: Icon(Icons.sentiment_satisfied),
               title: Text('今日の状態：忙しい'),
               subtitle: Text('今日は忙しそうなので時短レシピを優先しています！'),
             ),
           ),
-          SizedBox(height: 20),
-          Text(
+          const SizedBox(height: 20),
+          const Text(
             '今日のおすすめ献立',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-
-          const SizedBox(height: 10),
 
           const SizedBox(height: 10),
 
@@ -512,6 +517,17 @@ class _HomePageState extends State<HomePage> {
             time: selectedRecipe.time,
             tags: selectedRecipe.tags,
             locked: false,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MealDetailPage(
+                    menu: menu,
+                    onFavorite: widget.onFavorite,
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
 
@@ -540,11 +556,16 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.smart_toy),
             label: const Text('AI献立生成'),
           ),
-          SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: widget.onOpenWeeklyPlan,
+            icon: const Icon(Icons.calendar_month),
+            label: const Text('週間献立を見る'),
+          ),
+          const SizedBox(height: 20),
           Card(
             child: ListTile(
-              leading: Icon(Icons.smart_toy),
-              title: Text('AIからのアドバイス'),
+              leading: const Icon(Icons.smart_toy),
+              title: const Text('AIからのアドバイス'),
               subtitle: Text(aiAdvice),
             ),
           ),
@@ -555,56 +576,66 @@ class _HomePageState extends State<HomePage> {
 }
 
 class WeeklyPlanPage extends StatefulWidget {
-  const WeeklyPlanPage({super.key});
+  final double nutritionPriority;
+  final double quickPriority;
+  final double easyPriority;
+  final double newPriority;
+
+  const WeeklyPlanPage({
+    super.key,
+    required this.nutritionPriority,
+    required this.quickPriority,
+    required this.easyPriority,
+    required this.newPriority,
+  });
 
   @override
   State<WeeklyPlanPage> createState() => _WeeklyPlanPageState();
 }
 
 class _WeeklyPlanPageState extends State<WeeklyPlanPage> {
-  String mode = '普通';
-  List<Map<String, dynamic>> meals = [
-    {'day': '今日', 'title': '親子丼', 'time': '20分', 'locked': false},
-    {'day': '明日', 'title': '焼きそば', 'time': '15分', 'locked': false},
-    {'day': '明後日', 'title': 'カレーライス', 'time': '35分', 'locked': false},
-    {'day': '4日目', 'title': 'ハンバーグ', 'time': '30分', 'locked': false},
-    {'day': '5日目', 'title': 'オムライス', 'time': '25分', 'locked': false},
-    {'day': '6日目', 'title': '豚の生姜焼き', 'time': '25分', 'locked': false},
-    {'day': '7日目', 'title': '焼きそば', 'time': '15分', 'locked': false},
-  ];
-  void generateWeeklyMeals() {
+  final WeeklyPlanRepository _weeklyPlanRepository =
+      const WeeklyPlanRepository();
+  final AiCommentService _aiCommentService = const AiCommentService();
+  late WeeklyPlan weeklyPlan;
+  int generationIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    weeklyPlan = _generateWeeklyPlan();
+  }
+
+  @override
+  void didUpdateWidget(covariant WeeklyPlanPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.nutritionPriority != widget.nutritionPriority ||
+        oldWidget.quickPriority != widget.quickPriority ||
+        oldWidget.easyPriority != widget.easyPriority ||
+        oldWidget.newPriority != widget.newPriority) {
+      weeklyPlan = _generateWeeklyPlan();
+    }
+  }
+
+  WeeklyPlan _generateWeeklyPlan() {
+    return _weeklyPlanRepository.generate(
+      weights: priorityWeights,
+      generationIndex: generationIndex,
+    );
+  }
+
+  PriorityWeights get priorityWeights => PriorityWeights(
+        nutrition: widget.nutritionPriority,
+        quick: widget.quickPriority,
+        easy: widget.easyPriority,
+        fresh: widget.newPriority,
+      );
+
+  void regenerateWeeklyPlan() {
     setState(() {
-      if (mode == '忙しい') {
-        meals = [
-          {'day': '今日', 'title': '親子丼', 'time': '20分', 'locked': false},
-          {'day': '明日', 'title': '焼きそば', 'time': '15分', 'locked': false},
-          {'day': '明後日', 'title': 'カレーライス', 'time': '35分', 'locked': false},
-          {'day': '4日目', 'title': 'ハンバーグ', 'time': '30分', 'locked': false},
-          {'day': '5日目', 'title': 'オムライス', 'time': '25分', 'locked': false},
-          {'day': '6日目', 'title': '豚の生姜焼き', 'time': '25分', 'locked': false},
-          {'day': '7日目', 'title': '焼きそば', 'time': '15分', 'locked': false},
-        ];
-      } else if (mode == '普通') {
-        meals = [
-          {'day': '今日', 'title': '親子丼', 'time': '20分', 'locked': false},
-          {'day': '明日', 'title': '焼きそば', 'time': '15分', 'locked': false},
-          {'day': '明後日', 'title': 'カレーライス', 'time': '35分', 'locked': false},
-          {'day': '4日目', 'title': 'ハンバーグ', 'time': '30分', 'locked': false},
-          {'day': '5日目', 'title': 'オムライス', 'time': '25分', 'locked': false},
-          {'day': '6日目', 'title': '豚の生姜焼き', 'time': '25分', 'locked': false},
-          {'day': '7日目', 'title': '焼きそば', 'time': '15分', 'locked': false},
-        ];
-      } else {
-        meals = [
-          {'day': '今日', 'title': '親子丼', 'time': '20分', 'locked': false},
-          {'day': '明日', 'title': '焼きそば', 'time': '15分', 'locked': false},
-          {'day': '明後日', 'title': 'カレーライス', 'time': '35分', 'locked': false},
-          {'day': '4日目', 'title': 'ハンバーグ', 'time': '30分', 'locked': false},
-          {'day': '5日目', 'title': 'オムライス', 'time': '25分', 'locked': false},
-          {'day': '6日目', 'title': '豚の生姜焼き', 'time': '25分', 'locked': false},
-          {'day': '7日目', 'title': '焼きそば', 'time': '15分', 'locked': false},
-        ];
-      }
+      generationIndex += 1;
+      weeklyPlan = _generateWeeklyPlan();
     });
   }
 
@@ -615,73 +646,196 @@ class _WeeklyPlanPageState extends State<WeeklyPlanPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            color: const Color(0xFFFFF3E0),
+            child: ListTile(
+              leading: const Icon(Icons.smart_toy),
+              title: const Text('AIが1週間の献立を提案しました'),
+              subtitle: Text(
+                _aiCommentService.weeklyPlanComment(
+                  weeklyPlan,
+                  priorityWeights,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    mode = '忙しい';
-                  });
-                },
-                child: const Text('忙しい'),
+              Expanded(
+                child: _WeeklySummaryTile(
+                  icon: Icons.calendar_month,
+                  label: '期間',
+                  value: '${weeklyPlan.days.length}日分',
+                ),
               ),
-
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    mode = '普通';
-                  });
-                },
-                child: const Text('普通'),
-              ),
-
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    mode = '余裕ある';
-                  });
-                },
-                child: const Text('余裕ある'),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: _WeeklySummaryTile(
+                  icon: Icons.restaurant_menu,
+                  label: '構成',
+                  value: '主菜・副菜・汁物',
+                ),
               ),
             ],
           ),
-
-          const SizedBox(height: 16),
-          const Card(
-            color: Color(0xFFFFF3E0),
-            child: ListTile(
-              leading: Icon(Icons.lock_open),
-              title: Text('無料版は3日先まで表示できます'),
-              subtitle: Text('7日分の献立はプレミアムで解放'),
-            ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: regenerateWeeklyPlan,
+            icon: const Icon(Icons.refresh),
+            label: const Text('週間献立を再生成'),
           ),
-          ...meals.map(
-            (meal) => MealCard(
-              title: meal['title'] as String,
-              time: meal['time'] as String,
-              day: meal['day'] as String,
-              tags: const ['#時短', '#和食', '#節約'],
-              locked: meal['locked'] as bool,
-
-              onTap: () {
+          const SizedBox(height: 8),
+          ...weeklyPlan.days.map(
+            (dayPlan) => WeeklyDayPlanCard(
+              dayPlan: dayPlan,
+              onOpenMeal: (item) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
-                        MealDetailPage(menu: meal['title'], onFavorite: null),
+                        MealDetailPage(menu: item.name, category: item.label),
                   ),
                 );
               },
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: generateWeeklyMeals,
-            icon: const Icon(Icons.workspace_premium),
-            label: const Text('プレミアムで7日分を見る'),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+class _WeeklySummaryTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _WeeklySummaryTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.orange.shade100),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(color: Colors.grey[700])),
+                  Text(
+                    value,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class WeeklyDayPlanCard extends StatelessWidget {
+  final WeeklyDayPlan dayPlan;
+  final ValueChanged<WeeklyMealItem> onOpenMeal;
+
+  const WeeklyDayPlanCard({
+    super.key,
+    required this.dayPlan,
+    required this.onOpenMeal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              dayPlan.dayName,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            WeeklyMealTile(
+              item: dayPlan.mainDish,
+              showTopBorder: false,
+              onTap: () => onOpenMeal(dayPlan.mainDish),
+            ),
+            WeeklyMealTile(
+              item: dayPlan.sideDish,
+              onTap: () => onOpenMeal(dayPlan.sideDish),
+            ),
+            WeeklyMealTile(
+              item: dayPlan.soup,
+              onTap: () => onOpenMeal(dayPlan.soup),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class WeeklyMealTile extends StatelessWidget {
+  final WeeklyMealItem item;
+  final bool showTopBorder;
+  final VoidCallback onTap;
+
+  const WeeklyMealTile({
+    super.key,
+    required this.item,
+    required this.onTap,
+    this.showTopBorder = true,
+  });
+
+  IconData get icon {
+    switch (item.iconName) {
+      case 'spa':
+        return Icons.spa;
+      case 'ramen_dining':
+        return Icons.ramen_dining;
+      default:
+        return Icons.restaurant_menu;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: showTopBorder
+            ? Border(top: BorderSide(color: Colors.orange.shade100))
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: ListTile(
+          leading: Icon(icon, color: Colors.orange),
+          title: Text(
+            item.name,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(item.label),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
       ),
     );
   }
