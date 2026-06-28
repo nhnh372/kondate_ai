@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "368343776480",
+    "project_id": "kondate-ai-prod",
+    "storage_bucket": "kondate-ai-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:368343776480:android:06db315d2e9f117f992485",
+        "android_client_info": {
+          "package_name": "com.example.kondate_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcZe5gQ5S8xYQPyVPrTK1yam-oNU5bVjc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

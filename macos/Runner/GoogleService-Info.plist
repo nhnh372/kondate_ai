@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyCoJyv2Mm2pHAmHTR6xHnFCl3I7NXDqLCA</string>
+	<key>GCM_SENDER_ID</key>
+	<string>368343776480</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.kondateAi</string>
+	<key>PROJECT_ID</key>
+	<string>kondate-ai-prod</string>
+	<key>STORAGE_BUCKET</key>
+	<string>kondate-ai-prod.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:368343776480:ios:76e8e82f30820b2b992485</string>
+</dict>
+</plist>

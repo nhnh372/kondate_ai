@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 import 'data/recipes.dart';
 import 'models/recipe.dart';
@@ -10,7 +12,11 @@ import 'repositories/weekly_plan_repository.dart';
 import 'services/ai_comment_service.dart';
 import 'services/menu_generator.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const KondateAI());
 }
 
