@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
 import 'data/recipes.dart';
 import 'models/recipe.dart';
 import 'models/weekly_plan.dart';
+import 'repositories/auth_repository.dart';
 import 'repositories/favorite_repository.dart';
 import 'repositories/meal_detail_repository.dart';
 import 'repositories/weekly_plan_repository.dart';
@@ -41,6 +43,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  final AuthRepository _authRepository = AuthRepository();
   final FavoriteRepository _favoriteRepository = const FavoriteRepository();
   int currentIndex = 0;
   @override
@@ -188,7 +191,7 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  List<Widget> get pages => [
+  List<Widget> pages(User? user) => [
     HomePage(
       nutritionPriority: nutritionPriority,
       quickPriority: quickPriority,
@@ -207,6 +210,8 @@ class _MainPageState extends State<MainPage> {
     ),
     HistoryPage(historyMenus: historyMenus),
     MyPage(
+      currentUser: user,
+      authRepository: _authRepository,
       favoriteMenus: favoriteMenus,
       nutritionPriority: nutritionPriority,
       quickPriority: quickPriority,
@@ -219,25 +224,30 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: pages[currentIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            currentIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: 'ホーム'),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month),
-            label: '週間献立',
+    return StreamBuilder<User?>(
+      stream: _authRepository.authStateChanges(),
+      builder: (context, snapshot) {
+        return Scaffold(
+          body: pages(snapshot.data)[currentIndex],
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: currentIndex,
+            onDestinationSelected: (index) {
+              setState(() {
+                currentIndex = index;
+              });
+            },
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.home), label: 'ホーム'),
+              NavigationDestination(
+                icon: Icon(Icons.calendar_month),
+                label: '週間献立',
+              ),
+              NavigationDestination(icon: Icon(Icons.history), label: '履歴'),
+              NavigationDestination(icon: Icon(Icons.person), label: 'マイページ'),
+            ],
           ),
-          NavigationDestination(icon: Icon(Icons.history), label: '履歴'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'マイページ'),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -1574,6 +1584,8 @@ class HistoryPage extends StatelessWidget {
 }
 
 class MyPage extends StatefulWidget {
+  final User? currentUser;
+  final AuthRepository authRepository;
   final List<String> favoriteMenus;
   final double nutritionPriority;
   final double quickPriority;
@@ -1590,6 +1602,8 @@ class MyPage extends StatefulWidget {
 
   const MyPage({
     super.key,
+    required this.currentUser,
+    required this.authRepository,
     required this.favoriteMenus,
     required this.nutritionPriority,
     required this.quickPriority,
@@ -1664,6 +1678,92 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  Future<void> _signInWithGoogle() async {
+    try {
+      await widget.authRepository.signInWithGoogle();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Googleでログインしました')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Googleログインに失敗しました: $error')));
+    }
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await widget.authRepository.signOut();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('ログアウトしました')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('ログアウトに失敗しました: $error')));
+    }
+  }
+
+  Widget _authCard() {
+    final user = widget.currentUser;
+    final userLabel = user?.email ?? user?.displayName ?? 'ログイン中';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                user == null ? Icons.account_circle_outlined : Icons.verified_user,
+                color: Colors.orange,
+              ),
+              title: Text(user == null ? 'Googleログイン' : userLabel),
+              subtitle: Text(
+                user == null
+                    ? 'ログインするとFirestoreにお気に入りを保存できます'
+                    : 'Firestore連携中',
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (user == null)
+              FilledButton.icon(
+                onPressed: _signInWithGoogle,
+                icon: const Icon(Icons.login),
+                label: const Text('Googleでログイン'),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: _signOut,
+                icon: const Icon(Icons.logout),
+                label: const Text('ログアウト'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget prioritySlider(
     String title,
     double value,
@@ -1704,6 +1804,8 @@ class _MyPageState extends State<MyPage> {
         padding: const EdgeInsets.all(16),
         children: [
           const SizedBox(height: 16),
+          _authCard(),
+          const SizedBox(height: 24),
 
           const Text(
             'お気に入り献立',

@@ -36,6 +36,8 @@ class FavoriteRepository implements FavoriteMealRepository {
     final updatedFavorites = favorites.where((item) => item != menu).toList();
 
     await _saveFavorites(updatedFavorites);
+    await _deleteFavoriteFromFirestore(menu);
+
     return updatedFavorites;
   }
 
@@ -49,8 +51,15 @@ class FavoriteRepository implements FavoriteMealRepository {
       // ignore: avoid_print
       print('Firestoreお気に入り保存開始: $menu');
       final repository = firestoreRepository ?? FirestoreRepository();
+      final userId = repository.currentUserId;
 
-      await repository.saveFavorite(FirestoreRepository.testUserId, {
+      if (userId == null) {
+        // ignore: avoid_print
+        print('Firestoreお気に入り保存スキップ: 未ログイン');
+        return;
+      }
+
+      await repository.saveFavorite(userId, {
         'id': menu,
         'mealName': menu,
         'category': '献立',
@@ -61,6 +70,29 @@ class FavoriteRepository implements FavoriteMealRepository {
       // ignore: avoid_print
       print('Firestoreお気に入り保存エラー: $error');
       // Firestore保存に失敗しても、ローカルのお気に入り保存は維持する。
+    }
+  }
+
+  Future<void> _deleteFavoriteFromFirestore(String menu) async {
+    try {
+      // ignore: avoid_print
+      print('Firestoreお気に入り削除開始: $menu');
+      final repository = firestoreRepository ?? FirestoreRepository();
+      final userId = repository.currentUserId;
+
+      if (userId == null) {
+        // ignore: avoid_print
+        print('Firestoreお気に入り削除スキップ: 未ログイン');
+        return;
+      }
+
+      await repository.deleteFavorite(userId, menu);
+      // ignore: avoid_print
+      print('Firestoreお気に入り削除成功: $menu');
+    } catch (error) {
+      // ignore: avoid_print
+      print('Firestoreお気に入り削除エラー: $error');
+      // Firestore削除に失敗しても、ローカルのお気に入り削除は維持する。
     }
   }
 

@@ -1,14 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firestore_collection_names.dart';
 
 class FirestoreRepository {
-  FirestoreRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
-
-  static const testUserId = 'testUser';
+  FirestoreRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
+
+  String? get currentUserId => _auth.currentUser?.uid;
 
   Future<void> saveFavorite(
     String userId,
