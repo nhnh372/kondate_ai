@@ -1,12 +1,15 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/favorite_meal.dart';
+import 'firestore_repository.dart';
 import 'repository_contracts.dart';
 
 class FavoriteRepository implements FavoriteMealRepository {
-  const FavoriteRepository();
+  const FavoriteRepository({this.firestoreRepository});
 
   static const String _favoritesKey = 'favorites';
+
+  final FirestoreRepository? firestoreRepository;
 
   Future<List<String>> loadFavorites() async {
     final prefs = await SharedPreferences.getInstance();
@@ -17,11 +20,14 @@ class FavoriteRepository implements FavoriteMealRepository {
     final favorites = await loadFavorites();
 
     if (favorites.contains(menu)) {
+      await _saveFavoriteToFirestore(menu);
       return favorites;
     }
 
     final updatedFavorites = [...favorites, menu];
     await _saveFavorites(updatedFavorites);
+    await _saveFavoriteToFirestore(menu);
+
     return updatedFavorites;
   }
 
@@ -36,6 +42,26 @@ class FavoriteRepository implements FavoriteMealRepository {
   Future<void> _saveFavorites(List<String> favorites) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_favoritesKey, favorites);
+  }
+
+  Future<void> _saveFavoriteToFirestore(String menu) async {
+    try {
+      // ignore: avoid_print
+      print('Firestoreお気に入り保存開始: $menu');
+      final repository = firestoreRepository ?? FirestoreRepository();
+
+      await repository.saveFavorite(FirestoreRepository.testUserId, {
+        'id': menu,
+        'mealName': menu,
+        'category': '献立',
+      });
+      // ignore: avoid_print
+      print('Firestoreお気に入り保存成功: $menu');
+    } catch (error) {
+      // ignore: avoid_print
+      print('Firestoreお気に入り保存エラー: $error');
+      // Firestore保存に失敗しても、ローカルのお気に入り保存は維持する。
+    }
   }
 
   @override
