@@ -13,6 +13,17 @@ class FirestoreRepository {
 
   String? get currentUserId => _auth.currentUser?.uid;
 
+  Future<void> saveCurrentUser(User user) async {
+    await _firestore.collection(FirestoreCollectionNames.users).doc(user.uid).set({
+      'uid': user.uid,
+      'email': user.email,
+      'displayName': user.displayName,
+      'photoUrl': user.photoURL,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<void> saveFavorite(
     String userId,
     Map<String, dynamic> recipe,

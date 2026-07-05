@@ -14,6 +14,11 @@ class AuthRepository {
 
   Future<UserCredential> signInWithGoogle() {
     final provider = GoogleAuthProvider();
+    final options = _auth.app.options;
+
+    debugPrint('Googleログイン開始 projectId: ${options.projectId}');
+    debugPrint('Googleログイン開始 appId: ${options.appId}');
+    debugPrint('Googleログイン開始 authDomain: ${options.authDomain}');
 
     if (kIsWeb) {
       return _auth.signInWithPopup(provider);

@@ -9,6 +9,7 @@ import 'models/recipe.dart';
 import 'models/weekly_plan.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/favorite_repository.dart';
+import 'repositories/firestore_repository.dart';
 import 'repositories/meal_detail_repository.dart';
 import 'repositories/weekly_plan_repository.dart';
 import 'services/ai_comment_service.dart';
@@ -18,6 +19,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final firebaseOptions = Firebase.app().options;
+  debugPrint('Firebase projectId: ${firebaseOptions.projectId}');
+  debugPrint('Firebase appId: ${firebaseOptions.appId}');
+  debugPrint('Firebase authDomain: ${firebaseOptions.authDomain}');
   runApp(const KondateAI());
 }
 
@@ -30,26 +35,169 @@ class KondateAI extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'KONDATE AI',
       theme: ThemeData(colorSchemeSeed: Colors.orange, useMaterial3: true),
-      home: const MainPage(),
+      home: const AuthGate(),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  static final AuthRepository _authRepository = AuthRepository();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: _authRepository.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final user = snapshot.data;
+
+        if (user == null) {
+          return LoginPage(authRepository: _authRepository);
+        }
+
+        return MainPage(currentUser: user, authRepository: _authRepository);
+      },
+    );
+  }
+}
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key, required this.authRepository});
+
+  final AuthRepository authRepository;
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final FirestoreRepository _firestoreRepository = FirestoreRepository();
+  bool isSigningIn = false;
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      isSigningIn = true;
+    });
+
+    try {
+      final credential = await widget.authRepository.signInWithGoogle();
+      final user = credential.user;
+
+      if (user != null) {
+        await _firestoreRepository.saveCurrentUser(user);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Googleログインに失敗しました: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSigningIn = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF8F0),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Icon(
+                      Icons.restaurant_menu,
+                      color: Colors.orange,
+                      size: 56,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'KONDATE AI',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Googleアカウントでログインしてください',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: isSigningIn ? null : _signInWithGoogle,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSigningIn)
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            const Icon(Icons.login),
+                          const SizedBox(width: 8),
+                          Text(isSigningIn ? 'ログイン中' : 'Googleでログイン'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
 class MainPage extends StatefulWidget {
-  const MainPage({super.key});
+  const MainPage({
+    super.key,
+    required this.currentUser,
+    required this.authRepository,
+  });
+
+  final User currentUser;
+  final AuthRepository authRepository;
 
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> {
-  final AuthRepository _authRepository = AuthRepository();
   final FavoriteRepository _favoriteRepository = const FavoriteRepository();
+  final FirestoreRepository _firestoreRepository = FirestoreRepository();
   int currentIndex = 0;
   @override
   void initState() {
     super.initState();
 
+    saveCurrentUser();
     loadFavorites();
     loadHistory();
     loadPriorities();
@@ -62,6 +210,15 @@ class _MainPageState extends State<MainPage> {
   double quickPriority = 20;
   double easyPriority = 20;
   double newPriority = 20;
+
+  Future<void> saveCurrentUser() async {
+    try {
+      await _firestoreRepository.saveCurrentUser(widget.currentUser);
+    } catch (error) {
+      debugPrint('Firestoreユーザー保存エラー: $error');
+    }
+  }
+
   Widget prioritySlider(
     String title,
     double value,
@@ -191,7 +348,7 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  List<Widget> pages(User? user) => [
+  List<Widget> get pages => [
     HomePage(
       nutritionPriority: nutritionPriority,
       quickPriority: quickPriority,
@@ -210,8 +367,8 @@ class _MainPageState extends State<MainPage> {
     ),
     HistoryPage(historyMenus: historyMenus),
     MyPage(
-      currentUser: user,
-      authRepository: _authRepository,
+      currentUser: widget.currentUser,
+      authRepository: widget.authRepository,
       favoriteMenus: favoriteMenus,
       nutritionPriority: nutritionPriority,
       quickPriority: quickPriority,
@@ -224,30 +381,25 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: _authRepository.authStateChanges(),
-      builder: (context, snapshot) {
-        return Scaffold(
-          body: pages(snapshot.data)[currentIndex],
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: currentIndex,
-            onDestinationSelected: (index) {
-              setState(() {
-                currentIndex = index;
-              });
-            },
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.home), label: 'ホーム'),
-              NavigationDestination(
-                icon: Icon(Icons.calendar_month),
-                label: '週間献立',
-              ),
-              NavigationDestination(icon: Icon(Icons.history), label: '履歴'),
-              NavigationDestination(icon: Icon(Icons.person), label: 'マイページ'),
-            ],
+    return Scaffold(
+      body: pages[currentIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home), label: 'ホーム'),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month),
+            label: '週間献立',
           ),
-        );
-      },
+          NavigationDestination(icon: Icon(Icons.history), label: '履歴'),
+          NavigationDestination(icon: Icon(Icons.person), label: 'マイページ'),
+        ],
+      ),
     );
   }
 }

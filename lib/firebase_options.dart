@@ -42,12 +42,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyDoNjrVbO7XuxD1qLd0pum1mjJ53vOBiDU',
-    appId: '1:368343776480:web:1b6aa338f7624c8f992485',
+    appId: '1:368343776480:web:d8399177e69632b7992485',
     messagingSenderId: '368343776480',
     projectId: 'kondate-ai-prod',
     authDomain: 'kondate-ai-prod.firebaseapp.com',
     storageBucket: 'kondate-ai-prod.firebasestorage.app',
-    measurementId: 'G-BJ0KMV0JEG',
+    measurementId: 'G-FJSZ8XS3VQ',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
@@ -78,11 +78,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyDoNjrVbO7XuxD1qLd0pum1mjJ53vOBiDU',
-    appId: '1:368343776480:web:1b6aa338f7624c8f992485',
+    appId: '1:368343776480:web:d8399177e69632b7992485',
     messagingSenderId: '368343776480',
     projectId: 'kondate-ai-prod',
     authDomain: 'kondate-ai-prod.firebaseapp.com',
     storageBucket: 'kondate-ai-prod.firebasestorage.app',
-    measurementId: 'G-BJ0KMV0JEG',
+    measurementId: 'G-FJSZ8XS3VQ',
   );
 }
