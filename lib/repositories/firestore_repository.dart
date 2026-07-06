@@ -66,6 +66,26 @@ class FirestoreRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getMealHistory(String userId) async {
+    final snapshot = await _mealHistoryCollection(
+      userId,
+    ).orderBy('createdAt', descending: true).get();
+
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getCurrentUserMealHistory() async {
+    final userId = currentUserId;
+
+    if (userId == null) {
+      return [];
+    }
+
+    return getMealHistory(userId);
+  }
+
   Future<void> deleteFavorite(String userId, String recipeId) async {
     await _favoritesCollection(userId).doc(recipeId).delete();
   }

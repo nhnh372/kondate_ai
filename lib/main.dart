@@ -32,14 +32,26 @@ const Map<String, String> _recipeImageFileNames = {
   '冷やし中華': 'hiyashi_chuka.jpg',
 };
 
+const Set<String> _existingRecipeImageFileNames = {};
+
 String? _recipeImageAssetPathFor(String recipeName) {
   final fileName = _recipeImageFileNames[recipeName];
 
-  if (fileName == null) {
+  if (fileName == null || !_existingRecipeImageFileNames.contains(fileName)) {
     return null;
   }
 
   return '$_recipeImageAssetBasePath/$fileName';
+}
+
+bool _isExistingRecipeImageAssetPath(String imagePath) {
+  if (!imagePath.startsWith('$_recipeImageAssetBasePath/')) {
+    return false;
+  }
+
+  final fileName = imagePath.split('/').last;
+
+  return _existingRecipeImageFileNames.contains(fileName);
 }
 
 Future<void> main() async {
@@ -337,8 +349,8 @@ class _MainPageState extends State<MainPage> {
 
   Future<void> loadFavorites() async {
     final savedFavorites = await _favoriteRepository.loadFavorites();
-    final firestoreFavorites =
-        await _favoriteRepository.loadFirestoreFavoriteNamesForCurrentUser();
+    final firestoreFavorites = await _favoriteRepository
+        .loadFirestoreFavoriteNamesForCurrentUser();
     final displayFavorites = firestoreFavorites.isNotEmpty
         ? firestoreFavorites
         : savedFavorites;
@@ -380,7 +392,8 @@ class _MainPageState extends State<MainPage> {
     String description,
   ) async {
     try {
-      final userId = _firestoreRepository.currentUserId ?? widget.currentUser.uid;
+      final userId =
+          _firestoreRepository.currentUserId ?? widget.currentUser.uid;
 
       debugPrint('Firestore献立履歴保存開始: ${recipe.name}');
       await _firestoreRepository.saveMealHistory(userId, {
@@ -432,7 +445,10 @@ class _MainPageState extends State<MainPage> {
       easyPriority: easyPriority,
       newPriority: newPriority,
     ),
-    HistoryPage(historyMenus: historyMenus),
+    HistoryPage(
+      historyMenus: historyMenus,
+      firestoreRepository: _firestoreRepository,
+    ),
     MyPage(
       currentUser: widget.currentUser,
       authRepository: widget.authRepository,
@@ -1737,46 +1753,183 @@ class MealCard extends StatelessWidget {
 
 class HistoryPage extends StatelessWidget {
   final List<String> historyMenus;
+  final FirestoreRepository firestoreRepository;
 
-  const HistoryPage({super.key, required this.historyMenus});
+  const HistoryPage({
+    super.key,
+    required this.historyMenus,
+    required this.firestoreRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('履歴'), backgroundColor: Colors.orange),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: firestoreRepository.getCurrentUserMealHistory(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: historyMenus.isEmpty
-            ? [
-                const Card(
-                  child: ListTile(
-                    leading: Icon(Icons.history),
-                    title: Text('履歴はまだありません'),
-                    subtitle: Text('AI献立生成するとここに表示されます'),
-                  ),
-                ),
-              ]
-            : historyMenus.map((menu) {
-                return Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.history),
-                    title: Text(menu),
-                    subtitle: const Text('AIが生成した献立'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              MealDetailPage(menu: menu, onFavorite: null),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              }).toList(),
+          final histories = snapshot.data ?? [];
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: snapshot.hasError
+                ? _localHistoryCards(context)
+                : _firestoreHistoryCards(context, histories),
+          );
+        },
       ),
     );
+  }
+
+  List<Widget> _firestoreHistoryCards(
+    BuildContext context,
+    List<Map<String, dynamic>> histories,
+  ) {
+    if (histories.isEmpty) {
+      return [_emptyHistoryCard()];
+    }
+
+    return histories.map((history) {
+      final title = _readString(history, 'title', fallback: '献立');
+      final description = _readString(
+        history,
+        'description',
+        fallback: 'AIが生成した献立',
+      );
+      final difficulty = _readString(history, 'difficulty', fallback: '難易度未設定');
+      final cookingTime = _readString(
+        history,
+        'cookingTime',
+        fallback: '時間未設定',
+      );
+      final image = _readString(history, 'image');
+
+      return Card(
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    MealDetailPage(menu: title, onFavorite: null),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _historyImage(image),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$difficulty・$cookingTime',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  List<Widget> _localHistoryCards(BuildContext context) {
+    if (historyMenus.isEmpty) {
+      return [_emptyHistoryCard()];
+    }
+
+    return historyMenus.map((menu) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.history),
+          title: Text(menu),
+          subtitle: const Text('AIが生成した献立'),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    MealDetailPage(menu: menu, onFavorite: null),
+              ),
+            );
+          },
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _emptyHistoryCard() {
+    return const Card(
+      child: ListTile(
+        leading: Icon(Icons.history),
+        title: Text('履歴はまだありません'),
+        subtitle: Text('AI献立生成するとここに表示されます'),
+      ),
+    );
+  }
+
+  Widget _historyImage(String image) {
+    if (image.isEmpty || !_isExistingRecipeImageAssetPath(image)) {
+      return const SizedBox(width: 56, height: 56, child: Icon(Icons.history));
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.asset(
+        image,
+        width: 56,
+        height: 56,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return const SizedBox(
+            width: 56,
+            height: 56,
+            child: Icon(Icons.history),
+          );
+        },
+      ),
+    );
+  }
+
+  String _readString(
+    Map<String, dynamic> history,
+    String key, {
+    String fallback = '',
+  }) {
+    final value = history[key];
+
+    if (value is String && value.isNotEmpty) {
+      return value;
+    }
+
+    return fallback;
   }
 }
 
@@ -1932,14 +2085,14 @@ class _MyPageState extends State<MyPage> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(
-                user == null ? Icons.account_circle_outlined : Icons.verified_user,
+                user == null
+                    ? Icons.account_circle_outlined
+                    : Icons.verified_user,
                 color: Colors.orange,
               ),
               title: Text(user == null ? 'Googleログイン' : userLabel),
               subtitle: Text(
-                user == null
-                    ? 'ログインするとFirestoreにお気に入りを保存できます'
-                    : 'Firestore連携中',
+                user == null ? 'ログインするとFirestoreにお気に入りを保存できます' : 'Firestore連携中',
               ),
             ),
             const SizedBox(height: 8),
