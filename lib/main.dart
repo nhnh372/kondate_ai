@@ -15,6 +15,33 @@ import 'repositories/weekly_plan_repository.dart';
 import 'services/ai_comment_service.dart';
 import 'services/menu_generator.dart';
 
+const String _recipeImageAssetBasePath = 'lib/assets/images/recipes';
+
+const Map<String, String> _recipeImageFileNames = {
+  '親子丼': 'oyakodon.jpg',
+  'カレーライス': 'curry_rice.jpg',
+  '焼きそば': 'yakisoba.jpg',
+  'ハンバーグ': 'hamburg.jpg',
+  'オムライス': 'omurice.jpg',
+  '豚の生姜焼き': 'pork_ginger.jpg',
+  '鮭のホイル焼き': 'salmon_foil.jpg',
+  'ビビンバ': 'bibimbap.jpg',
+  '生姜焼き': 'ginger_pork.jpg',
+  '麻婆豆腐': 'mapo_tofu.jpg',
+  'サバの味噌煮': 'saba_miso.jpg',
+  '冷やし中華': 'hiyashi_chuka.jpg',
+};
+
+String? _recipeImageAssetPathFor(String recipeName) {
+  final fileName = _recipeImageFileNames[recipeName];
+
+  if (fileName == null) {
+    return null;
+  }
+
+  return '$_recipeImageAssetBasePath/$fileName';
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -310,16 +337,19 @@ class _MainPageState extends State<MainPage> {
 
   Future<void> loadFavorites() async {
     final savedFavorites = await _favoriteRepository.loadFavorites();
+    final firestoreFavorites =
+        await _favoriteRepository.loadFirestoreFavoriteNamesForCurrentUser();
+    final displayFavorites = firestoreFavorites.isNotEmpty
+        ? firestoreFavorites
+        : savedFavorites;
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      favoriteMenus = savedFavorites;
+      favoriteMenus = displayFavorites;
     });
-
-    await _favoriteRepository.loadFirestoreFavoritesForCurrentUser();
   }
 
   Future<void> saveHistory() async {
@@ -336,12 +366,47 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  void addHistory(String menu) {
+  Future<void> addHistory(Recipe recipe, String description) async {
     setState(() {
-      historyMenus.insert(0, menu);
+      historyMenus.insert(0, recipe.name);
     });
 
-    saveHistory();
+    await saveHistory();
+    await saveMealHistoryToFirestore(recipe, description);
+  }
+
+  Future<void> saveMealHistoryToFirestore(
+    Recipe recipe,
+    String description,
+  ) async {
+    try {
+      final userId = _firestoreRepository.currentUserId ?? widget.currentUser.uid;
+
+      debugPrint('Firestore献立履歴保存開始: ${recipe.name}');
+      await _firestoreRepository.saveMealHistory(userId, {
+        'title': recipe.name,
+        'description': description,
+        'difficulty': _difficultyLabel(recipe),
+        'cookingTime': recipe.time,
+        'image': _recipeImageAssetPathFor(recipe.name) ?? '',
+      });
+      debugPrint('Firestore献立履歴保存成功: ${recipe.name}');
+    } catch (error) {
+      debugPrint('Firestore献立履歴保存エラー: $error');
+      // Firestore保存に失敗しても、ローカルの履歴表示は維持する。
+    }
+  }
+
+  String _difficultyLabel(Recipe recipe) {
+    if (recipe.easy >= 85) {
+      return '簡単';
+    }
+
+    if (recipe.easy >= 65) {
+      return '普通';
+    }
+
+    return 'しっかり';
   }
 
   void openWeeklyPlan() {
@@ -561,7 +626,7 @@ class HomePage extends StatefulWidget {
   final double newPriority;
   final bool Function(String) isFavoriteForMenu;
   final Future<void> Function(String) onFavorite;
-  final void Function(String) onHistory;
+  final Future<void> Function(Recipe, String) onHistory;
   final VoidCallback onOpenWeeklyPlan;
 
   const HomePage({
@@ -604,19 +669,20 @@ class _HomePageState extends State<HomePage> {
   String aiAdvice = '忙しい日なので、時短で作れる献立を選びました😊';
   String mode = '忙しい';
 
-  void generateMenu() {
+  Future<void> generateMenu() async {
     final recommendation = _menuGenerator.recommend(
       recipes: recipes,
       weights: priorityWeights,
     );
+    final advice =
+        '${recommendation.reason} スコアは${recommendation.score.toStringAsFixed(1)}点です😊';
 
     setState(() {
       selectedRecipe = recommendation.recipe;
-      aiAdvice =
-          '${recommendation.reason} スコアは${recommendation.score.toStringAsFixed(1)}点です😊';
+      aiAdvice = advice;
     });
 
-    widget.onHistory(recommendation.recipe.name);
+    await widget.onHistory(recommendation.recipe, advice);
   }
 
   @override
@@ -871,32 +937,9 @@ class RecipeImage extends StatelessWidget {
     required this.height,
   });
 
-  static const String _assetBasePath = 'lib/assets/images/recipes';
-
   String? get assetPath {
-    final fileName = _assetFileNames[recipeName];
-
-    if (fileName == null) {
-      return null;
-    }
-
-    return '$_assetBasePath/$fileName';
+    return _recipeImageAssetPathFor(recipeName);
   }
-
-  static const Map<String, String> _assetFileNames = {
-    '親子丼': 'oyakodon.jpg',
-    'カレーライス': 'curry_rice.jpg',
-    '焼きそば': 'yakisoba.jpg',
-    'ハンバーグ': 'hamburg.jpg',
-    'オムライス': 'omurice.jpg',
-    '豚の生姜焼き': 'pork_ginger.jpg',
-    '鮭のホイル焼き': 'salmon_foil.jpg',
-    'ビビンバ': 'bibimbap.jpg',
-    '生姜焼き': 'ginger_pork.jpg',
-    '麻婆豆腐': 'mapo_tofu.jpg',
-    'サバの味噌煮': 'saba_miso.jpg',
-    '冷やし中華': 'hiyashi_chuka.jpg',
-  };
 
   @override
   Widget build(BuildContext context) {

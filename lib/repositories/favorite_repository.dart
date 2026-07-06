@@ -46,6 +46,15 @@ class FavoriteRepository implements FavoriteMealRepository {
     }
   }
 
+  Future<List<String>> loadFirestoreFavoriteNamesForCurrentUser() async {
+    final favorites = await loadFirestoreFavoritesForCurrentUser();
+
+    return favorites
+        .map((favorite) => favorite['mealName'] ?? favorite['id'])
+        .whereType<String>()
+        .toList();
+  }
+
   Future<List<String>> addFavorite(String menu) async {
     final favorites = await loadFavorites();
 

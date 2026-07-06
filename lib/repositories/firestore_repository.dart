@@ -56,8 +56,27 @@ class FirestoreRepository {
     return getFavorites(userId);
   }
 
+  Future<void> saveMealHistory(
+    String userId,
+    Map<String, dynamic> mealHistory,
+  ) async {
+    await _mealHistoryCollection(userId).add({
+      ...mealHistory,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> deleteFavorite(String userId, String recipeId) async {
     await _favoritesCollection(userId).doc(recipeId).delete();
+  }
+
+  CollectionReference<Map<String, dynamic>> _mealHistoryCollection(
+    String userId,
+  ) {
+    return _firestore
+        .collection(FirestoreCollectionNames.users)
+        .doc(userId)
+        .collection(FirestoreCollectionNames.mealHistory);
   }
 
   CollectionReference<Map<String, dynamic>> _favoritesCollection(
