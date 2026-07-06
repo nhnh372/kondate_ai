@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/favorite_meal.dart';
@@ -14,6 +15,35 @@ class FavoriteRepository implements FavoriteMealRepository {
   Future<List<String>> loadFavorites() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList(_favoritesKey) ?? [];
+  }
+
+  Future<List<Map<String, dynamic>>> loadFirestoreFavoritesForCurrentUser() async {
+    try {
+      debugPrint('Firestoreお気に入り取得開始');
+      final repository = firestoreRepository ?? FirestoreRepository();
+      final userId = repository.currentUserId;
+
+      if (userId == null) {
+        debugPrint('Firestoreお気に入り取得スキップ: 未ログイン');
+        return [];
+      }
+
+      final favorites = await repository.getFavorites(userId);
+      final favoriteNames = favorites
+          .map((favorite) => favorite['mealName'] ?? favorite['id'])
+          .whereType<String>()
+          .toList();
+
+      debugPrint(
+        'Firestoreお気に入り取得成功: uid=$userId, ${favorites.length}件, ${favoriteNames.join(', ')}',
+      );
+
+      return favorites;
+    } catch (error) {
+      debugPrint('Firestoreお気に入り取得エラー: $error');
+      // Firestore取得に失敗しても、ローカルのお気に入り表示は維持する。
+      return [];
+    }
   }
 
   Future<List<String>> addFavorite(String menu) async {

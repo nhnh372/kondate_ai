@@ -46,6 +46,16 @@ class FirestoreRepository {
         .toList();
   }
 
+  Future<List<Map<String, dynamic>>> getCurrentUserFavorites() async {
+    final userId = currentUserId;
+
+    if (userId == null) {
+      return [];
+    }
+
+    return getFavorites(userId);
+  }
+
   Future<void> deleteFavorite(String userId, String recipeId) async {
     await _favoritesCollection(userId).doc(recipeId).delete();
   }

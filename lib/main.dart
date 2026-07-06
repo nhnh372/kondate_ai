@@ -318,6 +318,8 @@ class _MainPageState extends State<MainPage> {
     setState(() {
       favoriteMenus = savedFavorites;
     });
+
+    await _favoriteRepository.loadFirestoreFavoritesForCurrentUser();
   }
 
   Future<void> saveHistory() async {
