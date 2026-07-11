@@ -17,6 +17,21 @@ import 'services/menu_generator.dart';
 
 const String _recipeImageAssetBasePath = 'lib/assets/images/recipes';
 
+enum _RecipeImageSourceType { asset, network }
+
+class _RecipeImageSource {
+  const _RecipeImageSource._({required this.type, required this.path});
+
+  const _RecipeImageSource.asset(String path)
+    : this._(type: _RecipeImageSourceType.asset, path: path);
+
+  const _RecipeImageSource.network(String path)
+    : this._(type: _RecipeImageSourceType.network, path: path);
+
+  final _RecipeImageSourceType type;
+  final String path;
+}
+
 const Map<String, String> _recipeImageFileNames = {
   '親子丼': 'oyakodon.jpg',
   'カレーライス': 'curry_rice.jpg',
@@ -32,26 +47,43 @@ const Map<String, String> _recipeImageFileNames = {
   '冷やし中華': 'hiyashi_chuka.jpg',
 };
 
-const Set<String> _existingRecipeImageFileNames = {};
-
 String? _recipeImageAssetPathFor(String recipeName) {
   final fileName = _recipeImageFileNames[recipeName];
 
-  if (fileName == null || !_existingRecipeImageFileNames.contains(fileName)) {
+  if (fileName == null) {
     return null;
   }
 
   return '$_recipeImageAssetBasePath/$fileName';
 }
 
-bool _isExistingRecipeImageAssetPath(String imagePath) {
-  if (!imagePath.startsWith('$_recipeImageAssetBasePath/')) {
-    return false;
+_RecipeImageSource? _recipeImageSourceForName(String recipeName) {
+  final assetPath = _recipeImageAssetPathFor(recipeName);
+
+  if (assetPath == null) {
+    return null;
   }
 
-  final fileName = imagePath.split('/').last;
+  return _RecipeImageSource.asset(assetPath);
+}
 
-  return _existingRecipeImageFileNames.contains(fileName);
+_RecipeImageSource? _recipeImageSourceFromStoredValue(String image) {
+  final trimmedImage = image.trim();
+
+  if (trimmedImage.isEmpty) {
+    return null;
+  }
+
+  final uri = Uri.tryParse(trimmedImage);
+  if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+    return _RecipeImageSource.network(trimmedImage);
+  }
+
+  if (trimmedImage.startsWith('$_recipeImageAssetBasePath/')) {
+    return _RecipeImageSource.asset(trimmedImage);
+  }
+
+  return null;
 }
 
 Future<void> main() async {
@@ -953,30 +985,66 @@ class RecipeImage extends StatelessWidget {
     required this.height,
   });
 
-  String? get assetPath {
-    return _recipeImageAssetPathFor(recipeName);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final path = assetPath;
+    final source = _recipeImageSourceForName(recipeName);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: SizedBox(
         width: double.infinity,
         height: height,
-        child: path == null
+        child: source == null
             ? const _NoRecipeImagePlaceholder()
-            : Image.asset(
-                path,
+            : _RecipeImageContent(
+                source: source,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const _NoRecipeImagePlaceholder();
-                },
+                errorFallback: const _NoRecipeImagePlaceholder(),
               ),
       ),
     );
+  }
+}
+
+class _RecipeImageContent extends StatelessWidget {
+  final _RecipeImageSource source;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final Widget errorFallback;
+
+  const _RecipeImageContent({
+    required this.source,
+    this.width,
+    this.height,
+    required this.fit,
+    required this.errorFallback,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    switch (source.type) {
+      case _RecipeImageSourceType.asset:
+        return Image.asset(
+          source.path,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) {
+            return errorFallback;
+          },
+        );
+      case _RecipeImageSourceType.network:
+        return Image.network(
+          source.path,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) {
+            return errorFallback;
+          },
+        );
+    }
   }
 }
 
@@ -1896,24 +1964,25 @@ class HistoryPage extends StatelessWidget {
   }
 
   Widget _historyImage(String image) {
-    if (image.isEmpty || !_isExistingRecipeImageAssetPath(image)) {
-      return const SizedBox(width: 56, height: 56, child: Icon(Icons.history));
+    final source = _recipeImageSourceFromStoredValue(image);
+    const fallback = SizedBox(
+      width: 56,
+      height: 56,
+      child: Icon(Icons.history),
+    );
+
+    if (source == null) {
+      return fallback;
     }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: Image.asset(
-        image,
+      child: _RecipeImageContent(
+        source: source,
         width: 56,
         height: 56,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return const SizedBox(
-            width: 56,
-            height: 56,
-            child: Icon(Icons.history),
-          );
-        },
+        errorFallback: fallback,
       ),
     );
   }
